@@ -14,9 +14,11 @@ def test_default_config_loads_without_artifacts() -> None:
     assert config.runtime.device == "cpu"
     assert config.runtime.num_threads == 1
     assert config.model.backend == "atlas-local"
-    assert config.model.context_length == 128
+    assert config.model.context_length == 64
     assert config.tokenizer.vocab_size == 512
     assert config.data.input_paths == (REPO_CONFIG.parents[1] / "examples" / "corpus.txt",)
+    assert config.transformer.d_model == 64
+    assert config.training.max_steps == 100
     assert not config.model.checkpoint_path.exists()
 
 
@@ -96,6 +98,16 @@ def test_oversized_config_is_rejected(tmp_path: Path) -> None:
         ({"data": {"stride": 0}}, "stride"),
         ({"data": {"val_fraction": 1.0}}, "val_fraction"),
         ({"data": {"unknown": 1}}, "Unknown keys in data"),
+        ({"transformer": {"d_model": 9, "num_heads": 2}}, "divide d_model"),
+        ({"transformer": {"num_layers": 0}}, "num_layers"),
+        ({"transformer": {"dropout": 1.0}}, "dropout"),
+        ({"transformer": {"tie_embeddings": "yes"}}, "boolean"),
+        ({"transformer": {"unknown": 1}}, "Unknown keys in transformer"),
+        ({"training": {"batch_size": 0}}, "batch_size"),
+        ({"training": {"max_steps": 0}}, "max_steps"),
+        ({"training": {"learning_rate": float("nan")}}, "learning_rate"),
+        ({"training": {"grad_clip": -1.0}}, "grad_clip"),
+        ({"training": {"unknown": 1}}, "Unknown keys in training"),
     ],
 )
 def test_invalid_values_are_rejected(data: dict[str, object], message: str) -> None:
@@ -112,6 +124,13 @@ def test_non_finite_temperature_is_rejected(value: str) -> None:
 def test_integer_temperature_is_accepted() -> None:
     config = parse_config({"model": {"temperature": 1}}, base_dir=Path("/tmp"))
     assert config.model.temperature == 1.0
+
+
+def test_smoke_config_is_separate_from_default_checkpoint() -> None:
+    config = load_config(REPO_CONFIG.parents[1] / "configs" / "smoke.toml")
+    assert config.model.checkpoint_path.name == "smoke.pt"
+    assert config.runtime.num_threads == 1
+    assert config.data.stride == config.model.context_length
 
 
 def test_config_view_is_json_serializable() -> None:

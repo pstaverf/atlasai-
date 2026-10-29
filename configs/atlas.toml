@@ -1,9 +1,9 @@
-# Atlas AI — stage 1.
+# Atlas AI — small CPU configuration.
 # Relative paths are resolved from THIS file's directory, not the shell cwd.
-# These values are validated now; training/inference will consume them in later stages.
+# Decoding settings are reserved for the stage-4 LLM adapter.
 
 [runtime]
-device = "cpu"             # Stage 1 supports CPU only.
+device = "cpu"             # CPU only through stage 3.
 seed = 42
 num_threads = 1            # Conservative default for a small VPS.
 data_dir = "../data"
@@ -13,7 +13,7 @@ checkpoint_dir = "../checkpoints"
 backend = "atlas-local"    # Our own transformer; no Ollama or external LLM API.
 tokenizer_path = "../checkpoints/tokenizer.json"
 checkpoint_path = "../checkpoints/atlas.pt"
-context_length = 128
+context_length = 64
 max_new_tokens = 128
 temperature = 0.0            # Deterministic decoding is the initial target.
 
@@ -23,5 +23,21 @@ min_frequency = 2
 
 [data]
 input_paths = ["../examples/corpus.txt"]
-stride = 128
-val_fraction = 0.1
+stride = 64                 # Training requires non-overlapping train/validation windows.
+val_fraction = 0.2
+
+[transformer]
+d_model = 64
+num_layers = 2
+num_heads = 4
+dropout = 0.1
+tie_embeddings = true
+
+[training]
+batch_size = 8
+max_steps = 100
+learning_rate = 0.001
+weight_decay = 0.01
+grad_clip = 1.0
+eval_every = 20
+log_every = 10

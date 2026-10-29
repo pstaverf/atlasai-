@@ -2,5 +2,5 @@
 
 from atlasai.config import AtlasConfig, ConfigError, load_config
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 __all__ = ["AtlasConfig", "ConfigError", "__version__", "load_config"]

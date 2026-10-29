@@ -1,4 +1,4 @@
-"""Dataset preparation for the future training loop."""
+"""Torch-free dataset exports; import trainer/checkpoint/evaluation lazily for ML."""
 
 from atlasai.training.dataset import (
     DatasetError,

@@ -1,7 +1,7 @@
 """Prepare next-token-prediction blocks from UTF-8 text documents.
 
-This module is deliberately PyTorch-free. Stage 3 can wrap these blocks in a
-torch Dataset/DataLoader without changing tokenizer or corpus preparation.
+This module is deliberately PyTorch-free. The trainer converts these blocks to
+tensors without changing tokenizer or corpus preparation.
 """
 
 from __future__ import annotations

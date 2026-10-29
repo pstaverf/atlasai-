@@ -57,10 +57,10 @@ def test_doctor_does_not_claim_model_readiness(
     captured = capsys.readouterr()
     assert exit_code == 0
     payload = json.loads(captured.out)
-    assert payload["stage"] == 2
+    assert payload["stage"] == 3
     assert payload["status"] == "ok"
     assert payload["model_loaded"] is False
-    assert payload["model_status"] == "not_implemented"
+    assert payload["model_status"] == "training_only"
     assert payload["artifacts"]["checkpoint"]["exists"] is False
 
 

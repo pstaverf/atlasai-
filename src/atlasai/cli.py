@@ -8,6 +8,7 @@ import os
 import platform
 import sys
 from collections.abc import Sequence
+from dataclasses import replace
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from atlasai import __version__
 from atlasai.config import DEFAULT_CONFIG_PATH, AtlasConfig, ConfigError, load_config
 from atlasai.core.tokenizer.bpe import BPETokenizer, TokenizerError, train_bpe
 from atlasai.training.dataset import DatasetError, load_dataset, read_documents
+from atlasai.training.errors import TrainingError
 
 _REQUIRED_PYTHON = (3, 12)
 
@@ -89,13 +91,17 @@ def doctor_report(config: AtlasConfig, config_path: Path) -> dict[str, object]:
         checks.append(
             _check("threads", "warning", "Configured threads exceed visible logical CPUs")
         )
-    if memory_mib is not None and memory_mib < 512:
-        checks.append(_check("memory", "warning", "Less than 512 MiB available on the host"))
+    if memory_mib is not None and memory_mib < 1024:
+        checks.append(
+            _check(
+                "memory", "warning", "Less than 1 GiB available; model training may be constrained"
+            )
+        )
 
     statuses = {check["status"] for check in checks}
     status = "error" if "error" in statuses else "warning" if "warning" in statuses else "ok"
     return {
-        "stage": 2,
+        "stage": 3,
         "status": status,
         "config_path": str(config_path),
         "backend": config.model.backend,
@@ -108,7 +114,7 @@ def doctor_report(config: AtlasConfig, config_path: Path) -> dict[str, object]:
         "torch": {"installed": torch_version is not None, "version": torch_version},
         "artifacts": artifacts,
         "model_loaded": False,
-        "model_status": "not_implemented",
+        "model_status": "training_only",
         "checks": checks,
     }
 
@@ -162,6 +168,26 @@ def _parser() -> argparse.ArgumentParser:
     inspect.add_argument("--stride", type=int, default=None)
     inspect.add_argument("--val-fraction", type=float, default=None)
     inspect.add_argument("--seed", type=int, default=None)
+
+    model = commands.add_parser("model", help="Train or evaluate the own CPU Transformer")
+    model_commands = model.add_subparsers(dest="model_command", required=True)
+    train_model_parser = model_commands.add_parser(
+        "train", parents=[common], help="Train and save the best validation checkpoint"
+    )
+    evaluate_parser = model_commands.add_parser(
+        "evaluate", parents=[common], help="Safely reload and evaluate a checkpoint"
+    )
+    for command in (train_model_parser, evaluate_parser):
+        command.add_argument("--input", nargs="*", type=Path, default=None)
+        command.add_argument("--tokenizer", type=Path, default=None)
+        command.add_argument("--checkpoint", type=Path, default=None)
+        command.add_argument("--val-fraction", type=float, default=None)
+        command.add_argument("--seed", type=int, default=None)
+        command.add_argument("--batch-size", type=int, default=None)
+    train_model_parser.add_argument("--context-length", type=int, default=None)
+    train_model_parser.add_argument("--stride", type=int, default=None)
+    train_model_parser.add_argument("--max-steps", type=int, default=None)
+    train_model_parser.add_argument("--quiet", action="store_true")
     return parser
 
 
@@ -246,6 +272,94 @@ def _run_dataset(args: argparse.Namespace, config: AtlasConfig) -> dict[str, obj
     return payload
 
 
+def _run_model(args: argparse.Namespace, config: AtlasConfig) -> dict[str, object]:
+    # Keep config/doctor/tokenizer/dataset commands usable without PyTorch.
+    try:
+        import torch
+    except (ImportError, OSError) as exc:
+        raise RuntimeError(
+            "PyTorch is required for model commands. "
+            "Install the CPU build using README instructions"
+        ) from exc
+    from atlasai.core.model.transformer import AtlasTransformer
+    from atlasai.training.checkpoint import load_model_checkpoint
+    from atlasai.training.evaluation import evaluate
+    from atlasai.training.trainer import configure_torch, train_model
+
+    paths = _input_paths(args, config)
+    tokenizer_path = _tokenizer_path(args, config)
+    tokenizer = BPETokenizer.load(tokenizer_path)
+    checkpoint_path = (
+        Path(args.checkpoint).expanduser().resolve(strict=False)
+        if args.checkpoint is not None
+        else config.model.checkpoint_path
+    )
+    val_fraction = args.val_fraction if args.val_fraction is not None else config.data.val_fraction
+    seed = args.seed if args.seed is not None else config.runtime.seed
+    batch_size = args.batch_size if args.batch_size is not None else config.training.batch_size
+    if args.model_command == "train":
+        forbidden = {tokenizer_path, *paths}
+        if checkpoint_path in forbidden or checkpoint_path.with_suffix(".metrics.json") in paths:
+            raise TrainingError("Model outputs must not overwrite the tokenizer or corpus")
+        context_length = (
+            args.context_length if args.context_length is not None else config.model.context_length
+        )
+        stride = args.stride if args.stride is not None else config.data.stride
+        dataset = load_dataset(
+            paths,
+            tokenizer,
+            context_length=context_length,
+            stride=stride,
+            val_fraction=val_fraction,
+            seed=seed,
+        )
+        training_config = replace(
+            config.training,
+            max_steps=args.max_steps if args.max_steps is not None else config.training.max_steps,
+            batch_size=batch_size,
+        )
+        configure_torch(seed=seed, num_threads=config.runtime.num_threads)
+        model = AtlasTransformer(
+            vocab_size=tokenizer.vocab_size,
+            context_length=context_length,
+            config=config.transformer,
+        )
+        result = train_model(
+            model,
+            dataset,
+            tokenizer_path=tokenizer_path,
+            checkpoint_path=checkpoint_path,
+            config=training_config,
+            seed=seed,
+            num_threads=config.runtime.num_threads,
+            verbose=not args.quiet,
+        )
+        payload: dict[str, object] = dict(result.to_dict())
+        payload["command"] = "model.train"
+        payload["dataset"] = dataset.stats.to_dict()
+        return payload
+    if args.model_command == "evaluate":
+        model, info = load_model_checkpoint(checkpoint_path, tokenizer_path=tokenizer_path)
+        configure_torch(seed=seed, num_threads=config.runtime.num_threads)
+        dataset = load_dataset(
+            paths,
+            tokenizer,
+            context_length=model.context_length,
+            stride=model.context_length,
+            val_fraction=val_fraction,
+            seed=seed,
+        )
+        metrics = evaluate(model, dataset.val, batch_size=batch_size, device=torch.device("cpu"))
+        return {
+            "command": "model.evaluate",
+            "checkpoint_path": str(checkpoint_path),
+            "checkpoint": info.to_dict(),
+            "validation": metrics.to_dict(),
+            "dataset": dataset.stats.to_dict(),
+        }
+    raise ConfigError(f"Unknown model command: {args.model_command}")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
@@ -260,9 +374,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             report = _run_tokenizer(args, config)
         elif args.command == "dataset":
             report = _run_dataset(args, config)
+        elif args.command == "model":
+            report = _run_model(args, config)
         else:
             raise ConfigError(f"Unknown command: {args.command}")
-    except (ConfigError, TokenizerError, DatasetError, OSError, RuntimeError) as exc:
+    except (ConfigError, TokenizerError, DatasetError, TrainingError, OSError, RuntimeError) as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 1
 

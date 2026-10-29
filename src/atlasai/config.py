@@ -1,4 +1,4 @@
-"""Strict, dependency-free TOML configuration for the stage-1 scaffold.
+"""Strict, dependency-free TOML configuration for Atlas AI.
 
 Loading a configuration never creates directories, imports torch, loads a model,
 or contacts the network. Missing model artifacts are therefore not config errors;
@@ -35,12 +35,12 @@ class RuntimeConfig:
 
 @dataclass(frozen=True, slots=True)
 class ModelConfig:
-    """Settings reserved for our own local model; no inference happens at stage 1."""
+    """Local artifact paths and decoding limits; the LLM adapter arrives at stage 4."""
 
     backend: Literal["atlas-local"] = "atlas-local"
     tokenizer_path: Path = Path("checkpoints/tokenizer.json")
     checkpoint_path: Path = Path("checkpoints/atlas.pt")
-    context_length: int = 128
+    context_length: int = 64
     max_new_tokens: int = 128
     temperature: float = 0.0
 
@@ -58,8 +58,133 @@ class DataConfig:
     """Corpus and next-token block preparation defaults."""
 
     input_paths: tuple[Path, ...] = ()
-    stride: int = 128
+    stride: int = 64
     val_fraction: float = 0.1
+
+
+@dataclass(frozen=True, slots=True)
+class TransformerConfig:
+    """Small pre-norm decoder; vocabulary and context come from the artifacts."""
+
+    d_model: int = 64
+    num_layers: int = 2
+    num_heads: int = 4
+    dropout: float = 0.1
+    tie_embeddings: bool = True
+
+    def validate(self) -> None:
+        if isinstance(self.d_model, bool) or not isinstance(self.d_model, int):
+            raise ConfigError("transformer.d_model must be an integer")
+        if not 8 <= self.d_model <= 512:
+            raise ConfigError("transformer.d_model must be between 8 and 512")
+        if isinstance(self.num_heads, bool) or not isinstance(self.num_heads, int):
+            raise ConfigError("transformer.num_heads must be an integer")
+        if not 1 <= self.num_heads <= 16 or self.d_model % self.num_heads:
+            raise ConfigError("transformer.num_heads must be 1..16 and divide d_model")
+        if isinstance(self.num_layers, bool) or not isinstance(self.num_layers, int):
+            raise ConfigError("transformer.num_layers must be an integer")
+        if not 1 <= self.num_layers <= 12:
+            raise ConfigError("transformer.num_layers must be between 1 and 12")
+        if (
+            isinstance(self.dropout, bool)
+            or not isinstance(self.dropout, (int, float))
+            or not math.isfinite(self.dropout)
+            or not 0.0 <= self.dropout < 1.0
+        ):
+            raise ConfigError("transformer.dropout must be finite and in [0, 1)")
+        if not isinstance(self.tie_embeddings, bool):
+            raise ConfigError("transformer.tie_embeddings must be a boolean")
+
+    @classmethod
+    def from_mapping(cls, values: Mapping[str, object]) -> TransformerConfig:
+        _check_keys(
+            values,
+            {"d_model", "num_layers", "num_heads", "dropout", "tie_embeddings"},
+            "transformer",
+        )
+        defaults = cls()
+        result = cls(
+            d_model=_integer(values, "d_model", defaults.d_model, minimum=8, maximum=512),
+            num_layers=_integer(values, "num_layers", defaults.num_layers, minimum=1, maximum=12),
+            num_heads=_integer(values, "num_heads", defaults.num_heads, minimum=1, maximum=16),
+            dropout=_number(values, "dropout", defaults.dropout, minimum=0.0, maximum=0.999),
+            tie_embeddings=_boolean(values, "tie_embeddings", defaults.tie_embeddings),
+        )
+        result.validate()
+        return result
+
+
+@dataclass(frozen=True, slots=True)
+class TrainingConfig:
+    """Bounded CPU training defaults; no distributed or mixed-precision machinery."""
+
+    batch_size: int = 8
+    max_steps: int = 100
+    learning_rate: float = 0.001
+    weight_decay: float = 0.01
+    grad_clip: float = 1.0
+    eval_every: int = 20
+    log_every: int = 10
+
+    def validate(self) -> None:
+        integer_bounds = (
+            ("batch_size", self.batch_size, 1, 128),
+            ("max_steps", self.max_steps, 1, 100_000),
+            ("eval_every", self.eval_every, 1, 100_000),
+            ("log_every", self.log_every, 1, 100_000),
+        )
+        for name, value, minimum, maximum in integer_bounds:
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ConfigError(f"training.{name} must be an integer")
+            if not minimum <= value <= maximum:
+                raise ConfigError(f"training.{name} must be between {minimum} and {maximum}")
+        number_bounds = (
+            ("learning_rate", self.learning_rate, 1e-8, 1.0),
+            ("weight_decay", self.weight_decay, 0.0, 1.0),
+            ("grad_clip", self.grad_clip, 0.0, 1000.0),
+        )
+        for name, number, lower, upper in number_bounds:
+            if (
+                isinstance(number, bool)
+                or not isinstance(number, (int, float))
+                or not math.isfinite(number)
+                or not lower <= number <= upper
+            ):
+                raise ConfigError(f"training.{name} must be finite and between {lower} and {upper}")
+
+    @classmethod
+    def from_mapping(cls, values: Mapping[str, object]) -> TrainingConfig:
+        _check_keys(
+            values,
+            {
+                "batch_size",
+                "max_steps",
+                "learning_rate",
+                "weight_decay",
+                "grad_clip",
+                "eval_every",
+                "log_every",
+            },
+            "training",
+        )
+        defaults = cls()
+        result = cls(
+            batch_size=_integer(values, "batch_size", defaults.batch_size, minimum=1, maximum=128),
+            max_steps=_integer(values, "max_steps", defaults.max_steps, minimum=1, maximum=100_000),
+            learning_rate=_number(
+                values, "learning_rate", defaults.learning_rate, minimum=1e-8, maximum=1.0
+            ),
+            weight_decay=_number(
+                values, "weight_decay", defaults.weight_decay, minimum=0.0, maximum=1.0
+            ),
+            grad_clip=_number(values, "grad_clip", defaults.grad_clip, minimum=0.0, maximum=1000.0),
+            eval_every=_integer(
+                values, "eval_every", defaults.eval_every, minimum=1, maximum=100_000
+            ),
+            log_every=_integer(values, "log_every", defaults.log_every, minimum=1, maximum=100_000),
+        )
+        result.validate()
+        return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +193,8 @@ class AtlasConfig:
     model: ModelConfig = field(default_factory=ModelConfig)
     tokenizer: TokenizerConfig = field(default_factory=TokenizerConfig)
     data: DataConfig = field(default_factory=DataConfig)
+    transformer: TransformerConfig = field(default_factory=TransformerConfig)
+    training: TrainingConfig = field(default_factory=TrainingConfig)
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-serializable view, including normalized absolute paths."""
@@ -95,6 +222,22 @@ class AtlasConfig:
                 "input_paths": [str(path) for path in self.data.input_paths],
                 "stride": self.data.stride,
                 "val_fraction": self.data.val_fraction,
+            },
+            "transformer": {
+                "d_model": self.transformer.d_model,
+                "num_layers": self.transformer.num_layers,
+                "num_heads": self.transformer.num_heads,
+                "dropout": self.transformer.dropout,
+                "tie_embeddings": self.transformer.tie_embeddings,
+            },
+            "training": {
+                "batch_size": self.training.batch_size,
+                "max_steps": self.training.max_steps,
+                "learning_rate": self.training.learning_rate,
+                "weight_decay": self.training.weight_decay,
+                "grad_clip": self.training.grad_clip,
+                "eval_every": self.training.eval_every,
+                "log_every": self.training.log_every,
             },
         }
 
@@ -140,6 +283,13 @@ def _number(
     return result
 
 
+def _boolean(table: Mapping[str, object], key: str, default: bool) -> bool:
+    value = table.get(key, default)
+    if not isinstance(value, bool):
+        raise ConfigError(f"{key} must be a boolean")
+    return value
+
+
 def _path(table: Mapping[str, object], key: str, default: Path, base_dir: Path) -> Path:
     value = table.get(key, str(default))
     if not isinstance(value, str) or not value.strip() or "\x00" in value:
@@ -170,7 +320,7 @@ def _path_list(
 
 def parse_config(data: Mapping[str, object], *, base_dir: Path) -> AtlasConfig:
     """Validate a TOML mapping and resolve relative paths against ``base_dir``."""
-    _check_keys(data, {"runtime", "model", "tokenizer", "data"}, "root")
+    _check_keys(data, {"runtime", "model", "tokenizer", "data", "transformer", "training"}, "root")
     runtime_defaults = RuntimeConfig()
     model_defaults = ModelConfig()
     tokenizer_defaults = TokenizerConfig()
@@ -179,6 +329,8 @@ def parse_config(data: Mapping[str, object], *, base_dir: Path) -> AtlasConfig:
     model_table = _table(data.get("model", {}), "model")
     tokenizer_table = _table(data.get("tokenizer", {}), "tokenizer")
     data_table = _table(data.get("data", {}), "data")
+    transformer_table = _table(data.get("transformer", {}), "transformer")
+    training_table = _table(data.get("training", {}), "training")
     _check_keys(
         runtime_table,
         {"device", "seed", "num_threads", "data_dir", "checkpoint_dir"},
@@ -258,7 +410,14 @@ def parse_config(data: Mapping[str, object], *, base_dir: Path) -> AtlasConfig:
             data_table, "val_fraction", data_defaults.val_fraction, minimum=0.0, maximum=0.999
         ),
     )
-    return AtlasConfig(runtime=runtime, model=model, tokenizer=tokenizer, data=data_config)
+    return AtlasConfig(
+        runtime=runtime,
+        model=model,
+        tokenizer=tokenizer,
+        data=data_config,
+        transformer=TransformerConfig.from_mapping(transformer_table),
+        training=TrainingConfig.from_mapping(training_table),
+    )
 
 
 def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AtlasConfig:

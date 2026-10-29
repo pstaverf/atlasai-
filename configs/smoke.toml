@@ -1,0 +1,42 @@
+# Reproducible CPU pipeline smoke experiment, not a quality benchmark.
+# Paths are relative to this file. Artifacts stay in ignored checkpoints/.
+
+[runtime]
+device = "cpu"
+seed = 42
+num_threads = 1
+data_dir = "../data"
+checkpoint_dir = "../checkpoints"
+
+[model]
+backend = "atlas-local"
+tokenizer_path = "../checkpoints/tokenizer.json"
+checkpoint_path = "../checkpoints/smoke.pt"
+context_length = 64
+max_new_tokens = 64
+temperature = 0.0
+
+[tokenizer]
+vocab_size = 512
+min_frequency = 2
+
+[data]
+input_paths = ["../examples/corpus.txt"]
+stride = 64
+val_fraction = 0.2
+
+[transformer]
+d_model = 64
+num_layers = 2
+num_heads = 4
+dropout = 0.1
+tie_embeddings = true
+
+[training]
+batch_size = 8
+max_steps = 100
+learning_rate = 0.001
+weight_decay = 0.01
+grad_clip = 1.0
+eval_every = 20
+log_every = 20
