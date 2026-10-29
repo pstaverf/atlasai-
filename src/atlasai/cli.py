@@ -1,9 +1,4 @@
-"""Command-line tools for configuration inspection and environment diagnostics.
-
-``doctor`` checks the stage-1 scaffold. It deliberately does not claim that a
-model is ready: inference is implemented in a later stage. Missing torch and
-model artifacts are reported as informational, not as scaffold failures.
-"""
+"""Command-line tools for configuration, diagnostics, tokenizer, and dataset prep."""
 
 from __future__ import annotations
 
@@ -18,6 +13,8 @@ from pathlib import Path
 
 from atlasai import __version__
 from atlasai.config import DEFAULT_CONFIG_PATH, AtlasConfig, ConfigError, load_config
+from atlasai.core.tokenizer.bpe import BPETokenizer, TokenizerError, train_bpe
+from atlasai.training.dataset import DatasetError, load_dataset, read_documents
 
 _REQUIRED_PYTHON = (3, 12)
 
@@ -65,7 +62,7 @@ def doctor_report(config: AtlasConfig, config_path: Path) -> dict[str, object]:
             "ok" if torch_version is not None else "info",
             f"Installed version {torch_version}"
             if torch_version is not None
-            else "Optional at stage 1; needed for later model stages",
+            else "Optional until the model stages",
         )
     )
 
@@ -80,9 +77,9 @@ def doctor_report(config: AtlasConfig, config_path: Path) -> dict[str, object]:
             _check(
                 name,
                 "ok" if exists else "info",
-                "File exists; contents are not validated at stage 1"
+                "File exists; doctor does not load or validate its contents"
                 if exists
-                else "Not created yet; expected before training/inference",
+                else "Not created yet",
             )
         )
 
@@ -98,7 +95,7 @@ def doctor_report(config: AtlasConfig, config_path: Path) -> dict[str, object]:
     statuses = {check["status"] for check in checks}
     status = "error" if "error" in statuses else "warning" if "warning" in statuses else "ok"
     return {
-        "stage": 1,
+        "stage": 2,
         "status": status,
         "config_path": str(config_path),
         "backend": config.model.backend,
@@ -116,9 +113,7 @@ def doctor_report(config: AtlasConfig, config_path: Path) -> dict[str, object]:
     }
 
 
-def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="atlasai", description="Atlas AI stage-1 scaffold")
-    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+def _common_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
         "--config",
@@ -126,10 +121,129 @@ def _parser() -> argparse.ArgumentParser:
         default=DEFAULT_CONFIG_PATH,
         help="TOML config path (default: configs/atlas.toml, relative to the current directory)",
     )
+    return common
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="atlasai", description="Atlas AI local-first toolkit")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    common = _common_parser()
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("config", parents=[common], help="Print the validated config as JSON")
-    commands.add_parser("doctor", parents=[common], help="Inspect the stage-1 environment as JSON")
+    commands.add_parser("doctor", parents=[common], help="Inspect the environment as JSON")
+
+    tokenizer = commands.add_parser("tokenizer", help="Train and use the byte-level BPE tokenizer")
+    tokenizer_commands = tokenizer.add_subparsers(dest="tokenizer_command", required=True)
+    train = tokenizer_commands.add_parser(
+        "train", parents=[common], help="Train BPE on UTF-8 files"
+    )
+    train.add_argument("--input", nargs="*", type=Path, default=None, help="Corpus .txt files")
+    train.add_argument("--output", type=Path, default=None, help="Tokenizer JSON output path")
+    train.add_argument("--vocab-size", type=int, default=None)
+    train.add_argument("--min-frequency", type=int, default=None)
+
+    encode = tokenizer_commands.add_parser("encode", parents=[common], help="Encode text to ids")
+    encode.add_argument("--tokenizer", type=Path, default=None)
+    encode.add_argument("--text", required=True)
+    encode.add_argument("--bos", action="store_true")
+    encode.add_argument("--eos", action="store_true")
+
+    decode = tokenizer_commands.add_parser("decode", parents=[common], help="Decode ids to text")
+    decode.add_argument("--tokenizer", type=Path, default=None)
+    decode.add_argument("--ids", required=True, help="Comma-separated token ids")
+    decode.add_argument("--keep-special", action="store_true")
+
+    dataset = commands.add_parser("dataset", help="Prepare next-token training blocks")
+    dataset_commands = dataset.add_subparsers(dest="dataset_command", required=True)
+    inspect = dataset_commands.add_parser("inspect", parents=[common], help="Print dataset stats")
+    inspect.add_argument("--input", nargs="*", type=Path, default=None)
+    inspect.add_argument("--tokenizer", type=Path, default=None)
+    inspect.add_argument("--context-length", type=int, default=None)
+    inspect.add_argument("--stride", type=int, default=None)
+    inspect.add_argument("--val-fraction", type=float, default=None)
+    inspect.add_argument("--seed", type=int, default=None)
     return parser
+
+
+def _input_paths(args: argparse.Namespace, config: AtlasConfig) -> list[Path]:
+    values = args.input if args.input is not None else list(config.data.input_paths)
+    if not values:
+        raise DatasetError("No input documents: pass --input or set data.input_paths")
+    return [Path(value).expanduser().resolve(strict=False) for value in values]
+
+
+def _tokenizer_path(args: argparse.Namespace, config: AtlasConfig) -> Path:
+    value = args.tokenizer if args.tokenizer is not None else config.model.tokenizer_path
+    return Path(value).expanduser().resolve(strict=False)
+
+
+def _run_tokenizer(args: argparse.Namespace, config: AtlasConfig) -> dict[str, object]:
+    if args.tokenizer_command == "train":
+        paths = _input_paths(args, config)
+        documents = list(read_documents(paths))
+        vocab_size = args.vocab_size if args.vocab_size is not None else config.tokenizer.vocab_size
+        min_frequency = (
+            args.min_frequency if args.min_frequency is not None else config.tokenizer.min_frequency
+        )
+        tokenizer = train_bpe(documents, vocab_size=vocab_size, min_frequency=min_frequency)
+        output = (
+            Path(args.output).expanduser().resolve(strict=False)
+            if args.output is not None
+            else config.model.tokenizer_path
+        )
+        tokenizer.save(output)
+        return {
+            "command": "tokenizer.train",
+            "output": str(output),
+            "documents": len(documents),
+            "vocab_size": tokenizer.vocab_size,
+            "merges": len(tokenizer.merges),
+        }
+    if args.tokenizer_command == "encode":
+        tokenizer = BPETokenizer.load(_tokenizer_path(args, config))
+        ids = tokenizer.encode(args.text, add_bos=args.bos, add_eos=args.eos)
+        return {"command": "tokenizer.encode", "ids": ids, "count": len(ids)}
+    if args.tokenizer_command == "decode":
+        tokenizer = BPETokenizer.load(_tokenizer_path(args, config))
+        try:
+            ids = [int(part.strip()) for part in args.ids.split(",") if part.strip()]
+        except ValueError as exc:
+            raise TokenizerError(f"Invalid token id list: {args.ids!r}") from exc
+        text = tokenizer.decode(ids, skip_special_tokens=not args.keep_special)
+        return {"command": "tokenizer.decode", "text": text}
+    raise ConfigError(f"Unknown tokenizer command: {args.tokenizer_command}")
+
+
+def _run_dataset(args: argparse.Namespace, config: AtlasConfig) -> dict[str, object]:
+    if args.dataset_command != "inspect":
+        raise ConfigError(f"Unknown dataset command: {args.dataset_command}")
+    paths = _input_paths(args, config)
+    tokenizer = BPETokenizer.load(_tokenizer_path(args, config))
+    context_length = (
+        args.context_length if args.context_length is not None else config.model.context_length
+    )
+    stride = args.stride if args.stride is not None else config.data.stride
+    val_fraction = args.val_fraction if args.val_fraction is not None else config.data.val_fraction
+    seed = args.seed if args.seed is not None else config.runtime.seed
+    dataset = load_dataset(
+        paths,
+        tokenizer,
+        context_length=context_length,
+        stride=stride,
+        val_fraction=val_fraction,
+        seed=seed,
+    )
+    payload: dict[str, object] = dict(dataset.stats.to_dict())
+    payload["command"] = "dataset.inspect"
+    payload["first_train_block"] = (
+        {
+            "input_ids": list(dataset.train[0].input_ids),
+            "target_ids": list(dataset.train[0].target_ids),
+        }
+        if dataset.train
+        else None
+    )
+    return payload
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -137,10 +251,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         config_path = Path(args.config).expanduser().resolve(strict=False)
         config = load_config(config_path)
-        report = (
-            doctor_report(config, config_path) if args.command == "doctor" else config.to_dict()
-        )
-    except (ConfigError, OSError, RuntimeError) as exc:
+        report: dict[str, object]
+        if args.command == "config":
+            report = config.to_dict()
+        elif args.command == "doctor":
+            report = doctor_report(config, config_path)
+        elif args.command == "tokenizer":
+            report = _run_tokenizer(args, config)
+        elif args.command == "dataset":
+            report = _run_dataset(args, config)
+        else:
+            raise ConfigError(f"Unknown command: {args.command}")
+    except (ConfigError, TokenizerError, DatasetError, OSError, RuntimeError) as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 1
 

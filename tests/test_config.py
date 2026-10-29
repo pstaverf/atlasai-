@@ -15,6 +15,8 @@ def test_default_config_loads_without_artifacts() -> None:
     assert config.runtime.num_threads == 1
     assert config.model.backend == "atlas-local"
     assert config.model.context_length == 128
+    assert config.tokenizer.vocab_size == 512
+    assert config.data.input_paths == (REPO_CONFIG.parents[1] / "examples" / "corpus.txt",)
     assert not config.model.checkpoint_path.exists()
 
 
@@ -36,6 +38,8 @@ def test_empty_config_uses_defaults() -> None:
     assert config.runtime.device == "cpu"
     assert config.model.backend == "atlas-local"
     assert config.runtime.data_dir == Path("/tmp/atlas-config/data")
+    assert config.tokenizer.min_frequency == 2
+    assert config.data.input_paths == ()
 
 
 def test_missing_file_has_clear_error(tmp_path: Path) -> None:
@@ -84,6 +88,14 @@ def test_oversized_config_is_rejected(tmp_path: Path) -> None:
         ({"model": {"temperature": True}}, "temperature must be a number"),
         ({"runtime": {"data_dir": ""}}, "data_dir"),
         ({"runtime": {"data_dir": "bad\x00path"}}, "NUL"),
+        ({"tokenizer": {"vocab_size": 258}}, "vocab_size"),
+        ({"tokenizer": {"min_frequency": 0}}, "min_frequency"),
+        ({"tokenizer": {"unknown": 1}}, "Unknown keys in tokenizer"),
+        ({"data": {"input_paths": "not-a-list"}}, "input_paths"),
+        ({"data": {"input_paths": [""]}}, "input_paths"),
+        ({"data": {"stride": 0}}, "stride"),
+        ({"data": {"val_fraction": 1.0}}, "val_fraction"),
+        ({"data": {"unknown": 1}}, "Unknown keys in data"),
     ],
 )
 def test_invalid_values_are_rejected(data: dict[str, object], message: str) -> None:

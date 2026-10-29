@@ -46,9 +46,28 @@ class ModelConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class TokenizerConfig:
+    """Byte-level BPE training defaults."""
+
+    vocab_size: int = 512
+    min_frequency: int = 2
+
+
+@dataclass(frozen=True, slots=True)
+class DataConfig:
+    """Corpus and next-token block preparation defaults."""
+
+    input_paths: tuple[Path, ...] = ()
+    stride: int = 128
+    val_fraction: float = 0.1
+
+
+@dataclass(frozen=True, slots=True)
 class AtlasConfig:
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
+    tokenizer: TokenizerConfig = field(default_factory=TokenizerConfig)
+    data: DataConfig = field(default_factory=DataConfig)
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-serializable view, including normalized absolute paths."""
@@ -67,6 +86,15 @@ class AtlasConfig:
                 "context_length": self.model.context_length,
                 "max_new_tokens": self.model.max_new_tokens,
                 "temperature": self.model.temperature,
+            },
+            "tokenizer": {
+                "vocab_size": self.tokenizer.vocab_size,
+                "min_frequency": self.tokenizer.min_frequency,
+            },
+            "data": {
+                "input_paths": [str(path) for path in self.data.input_paths],
+                "stride": self.data.stride,
+                "val_fraction": self.data.val_fraction,
             },
         }
 
@@ -123,13 +151,34 @@ def _path(table: Mapping[str, object], key: str, default: Path, base_dir: Path) 
         raise ConfigError(f"Cannot resolve {key}: {exc}") from exc
 
 
+def _path_list(
+    table: Mapping[str, object], key: str, default: tuple[Path, ...], base_dir: Path
+) -> tuple[Path, ...]:
+    value = table.get(key, [str(path) for path in default])
+    if not isinstance(value, list):
+        raise ConfigError(f"{key} must be a list of paths")
+    result: list[Path] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip() or "\x00" in item:
+            raise ConfigError(f"{key} must contain non-empty paths without NUL bytes")
+        try:
+            result.append((base_dir / Path(item).expanduser()).resolve(strict=False))
+        except (OSError, RuntimeError) as exc:
+            raise ConfigError(f"Cannot resolve {key}: {exc}") from exc
+    return tuple(result)
+
+
 def parse_config(data: Mapping[str, object], *, base_dir: Path) -> AtlasConfig:
     """Validate a TOML mapping and resolve relative paths against ``base_dir``."""
-    _check_keys(data, {"runtime", "model"}, "root")
+    _check_keys(data, {"runtime", "model", "tokenizer", "data"}, "root")
     runtime_defaults = RuntimeConfig()
     model_defaults = ModelConfig()
+    tokenizer_defaults = TokenizerConfig()
+    data_defaults = DataConfig()
     runtime_table = _table(data.get("runtime", {}), "runtime")
     model_table = _table(data.get("model", {}), "model")
+    tokenizer_table = _table(data.get("tokenizer", {}), "tokenizer")
+    data_table = _table(data.get("data", {}), "data")
     _check_keys(
         runtime_table,
         {"device", "seed", "num_threads", "data_dir", "checkpoint_dir"},
@@ -147,6 +196,8 @@ def parse_config(data: Mapping[str, object], *, base_dir: Path) -> AtlasConfig:
         },
         "model",
     )
+    _check_keys(tokenizer_table, {"vocab_size", "min_frequency"}, "tokenizer")
+    _check_keys(data_table, {"input_paths", "stride", "val_fraction"}, "data")
 
     device = runtime_table.get("device", runtime_defaults.device)
     if not isinstance(device, str) or device != "cpu":
@@ -184,7 +235,30 @@ def parse_config(data: Mapping[str, object], *, base_dir: Path) -> AtlasConfig:
             model_table, "temperature", model_defaults.temperature, minimum=0.0, maximum=2.0
         ),
     )
-    return AtlasConfig(runtime=runtime, model=model)
+    tokenizer = TokenizerConfig(
+        vocab_size=_integer(
+            tokenizer_table,
+            "vocab_size",
+            tokenizer_defaults.vocab_size,
+            minimum=259,
+            maximum=65_536,
+        ),
+        min_frequency=_integer(
+            tokenizer_table,
+            "min_frequency",
+            tokenizer_defaults.min_frequency,
+            minimum=1,
+            maximum=1_000_000,
+        ),
+    )
+    data_config = DataConfig(
+        input_paths=_path_list(data_table, "input_paths", data_defaults.input_paths, base_dir),
+        stride=_integer(data_table, "stride", data_defaults.stride, minimum=1, maximum=4096),
+        val_fraction=_number(
+            data_table, "val_fraction", data_defaults.val_fraction, minimum=0.0, maximum=0.999
+        ),
+    )
+    return AtlasConfig(runtime=runtime, model=model, tokenizer=tokenizer, data=data_config)
 
 
 def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> AtlasConfig:

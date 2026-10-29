@@ -16,3 +16,12 @@ checkpoint_path = "../checkpoints/atlas.pt"
 context_length = 128
 max_new_tokens = 128
 temperature = 0.0            # Deterministic decoding is the initial target.
+
+[tokenizer]
+vocab_size = 512             # 3 special tokens + 256 bytes + learned merges.
+min_frequency = 2
+
+[data]
+input_paths = ["../examples/corpus.txt"]
+stride = 128
+val_fraction = 0.1
