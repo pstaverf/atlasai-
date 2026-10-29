@@ -1,0 +1,18 @@
+# Atlas AI — stage 1.
+# Relative paths are resolved from THIS file's directory, not the shell cwd.
+# These values are validated now; training/inference will consume them in later stages.
+
+[runtime]
+device = "cpu"             # Stage 1 supports CPU only.
+seed = 42
+num_threads = 1            # Conservative default for a small VPS.
+data_dir = "../data"
+checkpoint_dir = "../checkpoints"
+
+[model]
+backend = "atlas-local"    # Our own transformer; no Ollama or external LLM API.
+tokenizer_path = "../checkpoints/tokenizer.json"
+checkpoint_path = "../checkpoints/atlas.pt"
+context_length = 128
+max_new_tokens = 128
+temperature = 0.0            # Deterministic decoding is the initial target.
