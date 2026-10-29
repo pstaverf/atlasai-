@@ -111,7 +111,10 @@ def train_model(
         print(f"step=0 validation_loss={initial.loss:.6f}", file=sys.stderr)
 
     optimizer = torch.optim.AdamW(
-        model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay
+        model.parameters(),
+        lr=config.learning_rate,
+        weight_decay=config.weight_decay,
+        foreach=False,
     )
     generator = torch.Generator(device="cpu").manual_seed(seed)
     parameters = list(model.parameters())

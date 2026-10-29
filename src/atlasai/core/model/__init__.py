@@ -1,5 +1,5 @@
-"""Own Transformer implementation; importing this package requires PyTorch."""
+"""Model package.
 
-from atlasai.core.model.transformer import AtlasTransformer
-
-__all__ = ["AtlasTransformer"]
+Import concrete submodules directly: ``base`` is torch-free, while
+``transformer`` and ``local`` require the optional PyTorch dependency.
+"""

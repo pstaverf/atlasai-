@@ -15,14 +15,16 @@ SMOKE_CONFIG = REPO / "configs" / "smoke.toml"
 CORPUS = REPO / "examples" / "corpus.txt"
 
 
-def test_model_train_and_evaluate_cli(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_model_train_and_evaluate_cli(
+    tmp_path: Path, tiny_config: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     pytest.importorskip("torch")
     tokenizer = tmp_path / "tokenizer.json"
     checkpoint = tmp_path / "model.pt"
     BPETokenizer().save(tokenizer)
     common = [
         "--config",
-        str(SMOKE_CONFIG),
+        str(tiny_config),
         "--input",
         str(CORPUS),
         "--tokenizer",
@@ -45,7 +47,7 @@ def test_model_train_and_evaluate_cli(tmp_path: Path, capsys: pytest.CaptureFixt
 
 
 def test_model_output_cannot_overwrite_tokenizer(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, tiny_config: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     pytest.importorskip("torch")
     tokenizer = tmp_path / "tokenizer.json"
@@ -55,7 +57,7 @@ def test_model_output_cannot_overwrite_tokenizer(
             "model",
             "train",
             "--config",
-            str(SMOKE_CONFIG),
+            str(tiny_config),
             "--input",
             str(CORPUS),
             "--tokenizer",

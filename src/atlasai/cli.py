@@ -1,4 +1,4 @@
-"""Command-line tools for configuration, diagnostics, tokenizer, and dataset prep."""
+"""Command-line tools for configuration, diagnostics, tokenizer, dataset, model, and LLM."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from pathlib import Path
 
 from atlasai import __version__
 from atlasai.config import DEFAULT_CONFIG_PATH, AtlasConfig, ConfigError, load_config
+from atlasai.core.model.base import LLMError
 from atlasai.core.tokenizer.bpe import BPETokenizer, TokenizerError, train_bpe
 from atlasai.training.dataset import DatasetError, load_dataset, read_documents
 from atlasai.training.errors import TrainingError
@@ -91,17 +92,19 @@ def doctor_report(config: AtlasConfig, config_path: Path) -> dict[str, object]:
         checks.append(
             _check("threads", "warning", "Configured threads exceed visible logical CPUs")
         )
-    if memory_mib is not None and memory_mib < 1024:
+    if memory_mib is not None and memory_mib < 1536:
         checks.append(
             _check(
-                "memory", "warning", "Less than 1 GiB available; model training may be constrained"
+                "memory",
+                "warning",
+                "Less than 1.5 GiB available; 10M-parameter training may be constrained",
             )
         )
 
     statuses = {check["status"] for check in checks}
     status = "error" if "error" in statuses else "warning" if "warning" in statuses else "ok"
     return {
-        "stage": 3,
+        "stage": 4,
         "status": status,
         "config_path": str(config_path),
         "backend": config.model.backend,
@@ -114,7 +117,7 @@ def doctor_report(config: AtlasConfig, config_path: Path) -> dict[str, object]:
         "torch": {"installed": torch_version is not None, "version": torch_version},
         "artifacts": artifacts,
         "model_loaded": False,
-        "model_status": "training_only",
+        "model_status": "local_backend_implemented",
         "checks": checks,
     }
 
@@ -188,6 +191,20 @@ def _parser() -> argparse.ArgumentParser:
     train_model_parser.add_argument("--stride", type=int, default=None)
     train_model_parser.add_argument("--max-steps", type=int, default=None)
     train_model_parser.add_argument("--quiet", action="store_true")
+
+    llm = commands.add_parser("llm", help="Use the own local LLM backend")
+    llm_commands = llm.add_subparsers(dest="llm_command", required=True)
+    generate = llm_commands.add_parser("generate", parents=[common], help="Generate text locally")
+    generate.add_argument("--prompt", required=True)
+    generate.add_argument("--max-new-tokens", type=int, default=None)
+    generate.add_argument("--temperature", type=float, default=None)
+    generate.add_argument("--seed", type=int, default=None)
+    info = llm_commands.add_parser(
+        "info", parents=[common], help="Inspect the loaded local backend"
+    )
+    for command in (generate, info):
+        command.add_argument("--tokenizer", type=Path, default=None)
+        command.add_argument("--checkpoint", type=Path, default=None)
     return parser
 
 
@@ -360,6 +377,43 @@ def _run_model(args: argparse.Namespace, config: AtlasConfig) -> dict[str, objec
     raise ConfigError(f"Unknown model command: {args.model_command}")
 
 
+def _run_llm(args: argparse.Namespace, config: AtlasConfig) -> dict[str, object]:
+    try:
+        from atlasai.core.model.local import AtlasLocalModel
+    except (ImportError, OSError) as exc:
+        raise RuntimeError(
+            "PyTorch is required for the local LLM backend. "
+            "Install the CPU build using README instructions"
+        ) from exc
+    checkpoint_path = (
+        Path(args.checkpoint).expanduser().resolve(strict=False)
+        if args.checkpoint is not None
+        else config.model.checkpoint_path
+    )
+    seed = args.seed if getattr(args, "seed", None) is not None else config.runtime.seed
+    backend = AtlasLocalModel(
+        checkpoint_path,
+        _tokenizer_path(args, config),
+        max_new_tokens=config.model.max_new_tokens,
+        temperature=config.model.temperature,
+        num_threads=config.runtime.num_threads,
+        seed=seed,
+    )
+    if args.llm_command == "info":
+        payload: dict[str, object] = dict(backend.info())
+        payload["command"] = "llm.info"
+        return payload
+    if args.llm_command == "generate":
+        result = backend.generate(
+            args.prompt, max_new_tokens=args.max_new_tokens, temperature=args.temperature
+        )
+        payload = dict(result.to_dict())
+        payload["command"] = "llm.generate"
+        payload["parameter_count"] = backend.parameter_count
+        return payload
+    raise ConfigError(f"Unknown llm command: {args.llm_command}")
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
@@ -376,9 +430,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             report = _run_dataset(args, config)
         elif args.command == "model":
             report = _run_model(args, config)
+        elif args.command == "llm":
+            report = _run_llm(args, config)
         else:
             raise ConfigError(f"Unknown command: {args.command}")
-    except (ConfigError, TokenizerError, DatasetError, TrainingError, OSError, RuntimeError) as exc:
+    except (
+        ConfigError,
+        TokenizerError,
+        DatasetError,
+        TrainingError,
+        LLMError,
+        OSError,
+        RuntimeError,
+    ) as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 1
 

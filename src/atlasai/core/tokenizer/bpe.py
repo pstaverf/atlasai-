@@ -24,6 +24,7 @@ from collections.abc import Iterable, Sequence
 from contextlib import suppress
 from itertools import pairwise
 from pathlib import Path
+from typing import Literal
 
 SPECIAL_TOKENS: tuple[str, ...] = ("<pad>", "<bos>", "<eos>")
 PAD_ID = 0
@@ -136,7 +137,15 @@ class BPETokenizer:
             result.append(EOS_ID)
         return result
 
-    def decode(self, token_ids: Iterable[int], *, skip_special_tokens: bool = True) -> str:
+    def decode(
+        self,
+        token_ids: Iterable[int],
+        *,
+        skip_special_tokens: bool = True,
+        errors: Literal["strict", "replace"] = "strict",
+    ) -> str:
+        if errors not in {"strict", "replace"}:
+            raise TokenizerError("errors must be 'strict' or 'replace'")
         buffer = bytearray()
         for token_id in token_ids:
             if isinstance(token_id, bool) or not isinstance(token_id, int):
@@ -149,7 +158,7 @@ class BPETokenizer:
             else:
                 raise TokenizerError(f"Unknown token id: {token_id}")
         try:
-            return buffer.decode("utf-8")
+            return buffer.decode("utf-8", errors=errors)
         except UnicodeDecodeError as exc:
             raise TokenizerError(f"Token ids do not form valid UTF-8 text: {exc}") from exc
 

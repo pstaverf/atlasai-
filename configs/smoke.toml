@@ -1,4 +1,4 @@
-# Reproducible CPU pipeline smoke experiment, not a quality benchmark.
+# Reproducible CPU smoke experiment for the >=10M-parameter model; not a quality benchmark.
 # Paths are relative to this file. Artifacts stay in ignored checkpoints/.
 
 [runtime]
@@ -13,7 +13,7 @@ backend = "atlas-local"
 tokenizer_path = "../checkpoints/tokenizer.json"
 checkpoint_path = "../checkpoints/smoke.pt"
 context_length = 64
-max_new_tokens = 64
+max_new_tokens = 16
 temperature = 0.0
 
 [tokenizer]
@@ -26,15 +26,15 @@ stride = 64
 val_fraction = 0.2
 
 [transformer]
-d_model = 64
-num_layers = 2
-num_heads = 4
+d_model = 384
+num_layers = 6
+num_heads = 8
 dropout = 0.1
 tie_embeddings = true
 
 [training]
-batch_size = 8
-max_steps = 100
+batch_size = 1
+max_steps = 200
 learning_rate = 0.001
 weight_decay = 0.01
 grad_clip = 1.0

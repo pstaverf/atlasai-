@@ -66,9 +66,9 @@ class DataConfig:
 class TransformerConfig:
     """Small pre-norm decoder; vocabulary and context come from the artifacts."""
 
-    d_model: int = 64
-    num_layers: int = 2
-    num_heads: int = 4
+    d_model: int = 384
+    num_layers: int = 6
+    num_heads: int = 8
     dropout: float = 0.1
     tie_embeddings: bool = True
 
@@ -118,8 +118,8 @@ class TransformerConfig:
 class TrainingConfig:
     """Bounded CPU training defaults; no distributed or mixed-precision machinery."""
 
-    batch_size: int = 8
-    max_steps: int = 100
+    batch_size: int = 1
+    max_steps: int = 60
     learning_rate: float = 0.001
     weight_decay: float = 0.01
     grad_clip: float = 1.0

@@ -17,8 +17,8 @@ def test_default_config_loads_without_artifacts() -> None:
     assert config.model.context_length == 64
     assert config.tokenizer.vocab_size == 512
     assert config.data.input_paths == (REPO_CONFIG.parents[1] / "examples" / "corpus.txt",)
-    assert config.transformer.d_model == 64
-    assert config.training.max_steps == 100
+    assert config.transformer.d_model == 384
+    assert config.training.max_steps == 60
     assert not config.model.checkpoint_path.exists()
 
 

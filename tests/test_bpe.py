@@ -132,3 +132,7 @@ def test_decode_unknown_id() -> None:
 def test_decode_invalid_utf8() -> None:
     with pytest.raises(TokenizerError, match="valid UTF-8"):
         BPETokenizer().decode([BYTE_OFFSET + 255])
+
+
+def test_decode_invalid_utf8_can_be_replaced_for_generation() -> None:
+    assert BPETokenizer().decode([BYTE_OFFSET + 255], errors="replace") == "\ufffd"
