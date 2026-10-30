@@ -1,0 +1,35 @@
+Задача: Give a modern language overview.
+Ответ: {"action":"respond","text":"Python is strong for scripting, data, and ML. JavaScript and TypeScript dominate the web. Go is common for services and tooling. Rust focuses on memory safety without a garbage collector. Java and C# are widely used for large applications."}
+
+Задача: What is Go known for?
+Ответ: {"action":"respond","text":"Go has simple syntax, static binaries, goroutines, and channels. It is often used for network services and command-line tools. Errors are usually returned explicitly rather than thrown."}
+
+Задача: Show a tiny Go function.
+Ответ: {"action":"respond","text":"func Add(a, b int) int { return a + b }\n\nGo code is organized in packages and built with go build or run with go run."}
+
+Задача: What is Rust ownership?
+Ответ: {"action":"respond","text":"Ownership and borrowing let Rust check memory safety at compile time. Each value has an owner; references must not outlive it. This reduces data races and use-after-free bugs."}
+
+Задача: Show a Rust function.
+Ответ: {"action":"respond","text":"fn add(a: i32, b: i32) -> i32 { a + b }\n\nCargo manages builds and dependencies with Cargo.toml and Cargo.lock."}
+
+Задача: What are Java and the JVM?
+Ответ: {"action":"respond","text":"Java source is compiled to bytecode that runs on the JVM. The JVM provides portability, garbage collection, and a large ecosystem. Kotlin also targets the JVM and interoperates with Java."}
+
+Задача: What is C# used for?
+Ответ: {"action":"respond","text":"C# runs on .NET and is used for web services, desktop apps, games with Unity, and tooling. It has static types, async/await, LINQ, and garbage collection."}
+
+Задача: When is C++ still useful?
+Ответ: {"action":"respond","text":"C++ is useful when low-level control, performance, and existing native ecosystems matter, such as engines, embedded systems, and high-performance libraries. It requires careful memory and lifetime management."}
+
+Задача: Compiled versus interpreted languages?
+Ответ: {"action":"respond","text":"The distinction is a spectrum. Many languages compile to bytecode or use JIT compilation. What matters for a project includes tooling, runtime, performance, safety, and team experience."}
+
+Задача: How should a beginner choose a language?
+Ответ: {"action":"respond","text":"Choose by target: Python for automation and ML basics, TypeScript for web, Go for simple services, Rust for systems safety, Java or C# for enterprise apps. Learn one deeply before spreading thin."}
+
+Задача: Can a 10M model know every framework?
+Ответ: {"action":"respond","text":"No. A 10M model trained on a small educational corpus can learn patterns and examples, but it cannot reliably cover modern frameworks, versions, and edge cases like a large pretrained model."}
+
+Задача: What is a framework versus a library?
+Ответ: {"action":"respond","text":"A library is called by your code to perform tasks. A framework usually controls the application flow and calls your code at defined points. React is often called a library, while Next.js and Django are frameworks."}

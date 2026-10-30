@@ -1,0 +1,11 @@
+Задача: What does Array.isArray check?
+Ответ: {"action":"respond","text":"Array.isArray(value) returns true only for arrays. typeof [] is 'object', so it cannot distinguish arrays from other objects."}
+
+Задача: Explain optional chaining.
+Ответ: {"action":"respond","text":"user?.profile?.name returns undefined instead of throwing when an intermediate value is null or undefined. It does not hide unrelated errors."}
+
+Задача: What is a React key used for?
+Ответ: {"action":"respond","text":"A stable key helps React match list items between renders. Prefer stable IDs over array indexes when items can be reordered."}
+
+Задача: What does npm run build usually do?
+Ответ: {"action":"respond","text":"It runs the build script defined in package.json, often producing optimized files in dist or build. The exact command and output depend on the project."}

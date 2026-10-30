@@ -166,6 +166,7 @@ def _parser() -> argparse.ArgumentParser:
     dataset_commands = dataset.add_subparsers(dest="dataset_command", required=True)
     inspect = dataset_commands.add_parser("inspect", parents=[common], help="Print dataset stats")
     inspect.add_argument("--input", nargs="*", type=Path, default=None)
+    inspect.add_argument("--validation-input", nargs="*", type=Path, default=None)
     inspect.add_argument("--tokenizer", type=Path, default=None)
     inspect.add_argument("--context-length", type=int, default=None)
     inspect.add_argument("--stride", type=int, default=None)
@@ -182,6 +183,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     for command in (train_model_parser, evaluate_parser):
         command.add_argument("--input", nargs="*", type=Path, default=None)
+        command.add_argument("--validation-input", nargs="*", type=Path, default=None)
         command.add_argument("--tokenizer", type=Path, default=None)
         command.add_argument("--checkpoint", type=Path, default=None)
         command.add_argument("--val-fraction", type=float, default=None)
@@ -212,6 +214,18 @@ def _input_paths(args: argparse.Namespace, config: AtlasConfig) -> list[Path]:
     values = args.input if args.input is not None else list(config.data.input_paths)
     if not values:
         raise DatasetError("No input documents: pass --input or set data.input_paths")
+    return [Path(value).expanduser().resolve(strict=False) for value in values]
+
+
+def _validation_input_paths(args: argparse.Namespace, config: AtlasConfig) -> list[Path] | None:
+    if args.validation_input is not None:
+        values = list(args.validation_input)
+        if not values:
+            raise DatasetError("--validation-input requires at least one document")
+    elif config.data.validation_input_paths:
+        values = list(config.data.validation_input_paths)
+    else:
+        return None
     return [Path(value).expanduser().resolve(strict=False) for value in values]
 
 
@@ -261,6 +275,7 @@ def _run_dataset(args: argparse.Namespace, config: AtlasConfig) -> dict[str, obj
     if args.dataset_command != "inspect":
         raise ConfigError(f"Unknown dataset command: {args.dataset_command}")
     paths = _input_paths(args, config)
+    validation_paths = _validation_input_paths(args, config)
     tokenizer = BPETokenizer.load(_tokenizer_path(args, config))
     context_length = (
         args.context_length if args.context_length is not None else config.model.context_length
@@ -275,6 +290,7 @@ def _run_dataset(args: argparse.Namespace, config: AtlasConfig) -> dict[str, obj
         stride=stride,
         val_fraction=val_fraction,
         seed=seed,
+        validation_paths=validation_paths,
     )
     payload: dict[str, object] = dict(dataset.stats.to_dict())
     payload["command"] = "dataset.inspect"
@@ -304,6 +320,7 @@ def _run_model(args: argparse.Namespace, config: AtlasConfig) -> dict[str, objec
     from atlasai.training.trainer import configure_torch, train_model
 
     paths = _input_paths(args, config)
+    validation_paths = _validation_input_paths(args, config)
     tokenizer_path = _tokenizer_path(args, config)
     tokenizer = BPETokenizer.load(tokenizer_path)
     checkpoint_path = (
@@ -315,7 +332,7 @@ def _run_model(args: argparse.Namespace, config: AtlasConfig) -> dict[str, objec
     seed = args.seed if args.seed is not None else config.runtime.seed
     batch_size = args.batch_size if args.batch_size is not None else config.training.batch_size
     if args.model_command == "train":
-        forbidden = {tokenizer_path, *paths}
+        forbidden = {tokenizer_path, *paths, *(validation_paths or [])}
         if checkpoint_path in forbidden or checkpoint_path.with_suffix(".metrics.json") in paths:
             raise TrainingError("Model outputs must not overwrite the tokenizer or corpus")
         context_length = (
@@ -329,6 +346,7 @@ def _run_model(args: argparse.Namespace, config: AtlasConfig) -> dict[str, objec
             stride=stride,
             val_fraction=val_fraction,
             seed=seed,
+            validation_paths=validation_paths,
         )
         training_config = replace(
             config.training,
@@ -365,6 +383,7 @@ def _run_model(args: argparse.Namespace, config: AtlasConfig) -> dict[str, objec
             stride=model.context_length,
             val_fraction=val_fraction,
             seed=seed,
+            validation_paths=validation_paths,
         )
         metrics = evaluate(model, dataset.val, batch_size=batch_size, device=torch.device("cpu"))
         return {

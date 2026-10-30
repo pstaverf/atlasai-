@@ -122,6 +122,22 @@ def split_blocks(
     return train, val
 
 
+def _blocks_from_documents(
+    documents: Sequence[str],
+    tokenizer: BPETokenizer,
+    *,
+    context_length: int,
+    stride: int,
+) -> tuple[list[TokenBlock], int, int]:
+    """Build one stream per split; EOS separates documents inside that split."""
+    token_ids: list[int] = []
+    for document in documents:
+        token_ids.extend(tokenizer.encode(document))
+        token_ids.append(EOS_ID)
+    blocks, dropped = build_blocks(token_ids, context_length=context_length, stride=stride)
+    return blocks, len(token_ids), dropped
+
+
 def load_dataset(
     paths: Sequence[Path],
     tokenizer: BPETokenizer,
@@ -130,8 +146,50 @@ def load_dataset(
     stride: int,
     val_fraction: float = 0.1,
     seed: int = 42,
+    validation_paths: Sequence[Path] | None = None,
 ) -> TokenDataset:
-    """Read documents, insert EOS boundaries, and build train/validation blocks."""
+    """Read documents and build train/validation blocks.
+
+    With ``validation_paths``, train and validation documents form separate
+    streams, so no validation tokens are used for training. Without it, the
+    legacy smoke behavior concatenates documents and shuffles windows by
+    ``val_fraction``.
+    """
+    if validation_paths is not None and len(validation_paths) > 0:
+        train_paths = {Path(path).expanduser().resolve() for path in paths}
+        val_paths = {Path(path).expanduser().resolve() for path in validation_paths}
+        overlap = sorted(str(path) for path in train_paths & val_paths)
+        if overlap:
+            raise DatasetError(
+                f"Validation documents must not also be training documents: {', '.join(overlap)}"
+            )
+        train_documents = list(read_documents(paths))
+        val_documents = list(read_documents(validation_paths))
+        train_blocks, train_tokens, train_dropped = _blocks_from_documents(
+            train_documents, tokenizer, context_length=context_length, stride=stride
+        )
+        val_blocks, val_tokens, val_dropped = _blocks_from_documents(
+            val_documents, tokenizer, context_length=context_length, stride=stride
+        )
+        if not train_blocks:
+            raise DatasetError(
+                f"Training corpus produced no full blocks of {context_length + 1} tokens"
+            )
+        if not val_blocks:
+            raise DatasetError(
+                f"Validation corpus produced no full blocks of {context_length + 1} tokens"
+            )
+        stats = DatasetStats(
+            documents=len(train_documents) + len(val_documents),
+            total_tokens=train_tokens + val_tokens,
+            train_blocks=len(train_blocks),
+            val_blocks=len(val_blocks),
+            context_length=context_length,
+            stride=stride,
+            dropped_tokens=train_dropped + val_dropped,
+        )
+        return TokenDataset(train=tuple(train_blocks), val=tuple(val_blocks), stats=stats)
+
     documents = list(read_documents(paths))
     token_ids: list[int] = []
     for document in documents:

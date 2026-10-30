@@ -51,6 +51,7 @@ Atlas AI — локальная агентная система с **собст�
 - PAD/BOS не могут быть сгенерированы как обычные токены. Невалидный UTF-8 в выводе заменяется на `U+FFFD`, а строгий roundtrip токенизатора остаётся строгим.
 - CLI `llm info` и `llm generate`.
 - Конфигурация по умолчанию: `d_model=384`, `layers=6`, `heads=8`, vocab 512, context 64, tied embeddings → **10 868 736 параметров**.
+- Учебный конфиг `foundation.toml`: vocab 2048, context 256 → **11 532 288 параметров**, отдельные train/validation документы.
 
 Загрузка конфига **не создаёт каталоги, не импортирует torch, не загружает веса и не обращается к сети**. Команды этапов 1–2 работают без PyTorch. `seed` и `num_threads` применяются при обучении, оценке и генерации.
 
@@ -67,7 +68,10 @@ Atlas AI — локальная агентная система с **собст�
 │   ├── atlas.toml
 │   └── smoke.toml
 ├── examples/
-│   └── corpus.txt
+│   ├── corpus.txt
+│   └── foundation/
+│       ├── train/       # 10 учебных документов
+│       └── val/         # 10 отдельных validation-документов
 ├── src/atlasai/
 │   ├── __init__.py
 │   ├── __main__.py
@@ -96,7 +100,8 @@ Atlas AI — локальная агентная система с **собст�
     ├── test_cli_stage3.py
     ├── test_llm.py
     ├── test_cli_stage4.py
-    └── test_model_scale.py
+    ├── test_model_scale.py
+    └── test_foundation.py
 ```
 
 План следующих этапов, пока без фиктивных реализаций:
@@ -220,6 +225,29 @@ atlasai model train --config configs/atlas.toml --max-steps 10 --batch-size 2
 atlasai model evaluate --config configs/atlas.toml --batch-size 2
 ```
 
+## Учебный прогон Foundation
+
+Кроме крошечного smoke-корпуса есть авторский учебный корпус `examples/foundation/`: русский и английский диалоги, Python, JavaScript/TypeScript и фреймворки, веб/HTTP, терминал Linux, Git, SQL/данные, обзор Go/Rust/Java/C#/C++ и протокол агента. Train и validation лежат в разных файлах; validation не используется для обучения весов или BPE-правил.
+
+```bash
+atlasai tokenizer train --config configs/foundation.toml
+atlasai dataset inspect --config configs/foundation.toml
+atlasai model train --config configs/foundation.toml
+atlasai model evaluate --config configs/foundation.toml
+atlasai llm generate --config configs/foundation.toml --prompt $'Задача: Что делает git status?\nОтвет:' --max-new-tokens 96
+```
+
+Фактический прогон в этой песочнице:
+
+- модель: **11 532 288 параметров**, vocab 2048, context 256;
+- корпус: 20 документов, 9 989 токенов, 29 train-блоков и 9 validation-блоков;
+- 600 шагов, batch size 1, learning rate 0.0003, dropout 0.2;
+- initial validation loss **7.732805**, лучший validation loss **6.103735** на шаге 500;
+- время training loop около **160 s**, peak RSS около **980 MiB**;
+- чекпоинт около **49 MB**.
+
+Это настоящее обучение, но **не полноценное знание языков и фреймворков**. Корпус слишком мал: модель начинает запоминать тренировочные фрагменты, а ответы на validation и новые вопросы остаются ненадёжными и часто бессвязными. Прогон нужен как честная база для следующих этапов, а не как готовая универсальная LLM. На 1 ГБ RAM обучение ещё теснее, чем smoke; для практики лучше инференс готового чекпоинта или больше RAM.
+
 ## Локальная генерация
 
 После обучения чекпоинта:
@@ -264,7 +292,7 @@ python -m pip check
 atlasai doctor --config configs/atlas.toml
 ```
 
-В полном окружении с PyTorch: **155 passed**. Дополнительно проверено окружение с заблокированным импортом torch: команды каркаса, токенизатора и датасета работают, ML-тесты явно пропускаются. Проверялись также сборка wheel, установка console script, строгая типизация и реальные CLI-команды обучения/оценки/генерации.
+В полном окружении с PyTorch: **163 passed**. Дополнительно проверено окружение с заблокированным импортом torch: команды каркаса, токенизатора и датасета работают, ML-тесты явно пропускаются. Проверялись также сборка wheel, установка console script, строгая типизация и реальные CLI-команды обучения/оценки/генерации.
 
 ## Дорожная карта
 

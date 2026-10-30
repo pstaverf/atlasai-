@@ -1,0 +1,65 @@
+# Educational foundation run: separate train/validation documents, CPU, >=10M parameters.
+# This is a small curated corpus, not broad pretraining or a quality benchmark.
+
+[runtime]
+device = "cpu"
+seed = 42
+num_threads = 1
+data_dir = "../data"
+checkpoint_dir = "../checkpoints"
+
+[model]
+backend = "atlas-local"
+tokenizer_path = "../checkpoints/foundation-tokenizer.json"
+checkpoint_path = "../checkpoints/foundation.pt"
+context_length = 256
+max_new_tokens = 128
+temperature = 0.0
+
+[tokenizer]
+vocab_size = 2048
+min_frequency = 2
+
+[data]
+input_paths = [
+  "../examples/foundation/train/russian.txt",
+  "../examples/foundation/train/english.txt",
+  "../examples/foundation/train/python.txt",
+  "../examples/foundation/train/javascript.txt",
+  "../examples/foundation/train/web.txt",
+  "../examples/foundation/train/terminal.txt",
+  "../examples/foundation/train/git.txt",
+  "../examples/foundation/train/data_sql.txt",
+  "../examples/foundation/train/systems.txt",
+  "../examples/foundation/train/agent_protocol.txt",
+]
+validation_input_paths = [
+  "../examples/foundation/val/russian.txt",
+  "../examples/foundation/val/english.txt",
+  "../examples/foundation/val/python.txt",
+  "../examples/foundation/val/javascript.txt",
+  "../examples/foundation/val/web.txt",
+  "../examples/foundation/val/terminal.txt",
+  "../examples/foundation/val/git.txt",
+  "../examples/foundation/val/data_sql.txt",
+  "../examples/foundation/val/systems.txt",
+  "../examples/foundation/val/agent_protocol.txt",
+]
+stride = 256
+val_fraction = 0.0
+
+[transformer]
+d_model = 384
+num_layers = 6
+num_heads = 8
+dropout = 0.2
+tie_embeddings = true
+
+[training]
+batch_size = 1
+max_steps = 600
+learning_rate = 0.0003
+weight_decay = 0.01
+grad_clip = 1.0
+eval_every = 50
+log_every = 50

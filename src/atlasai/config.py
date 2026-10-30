@@ -58,6 +58,7 @@ class DataConfig:
     """Corpus and next-token block preparation defaults."""
 
     input_paths: tuple[Path, ...] = ()
+    validation_input_paths: tuple[Path, ...] = ()
     stride: int = 64
     val_fraction: float = 0.1
 
@@ -220,6 +221,7 @@ class AtlasConfig:
             },
             "data": {
                 "input_paths": [str(path) for path in self.data.input_paths],
+                "validation_input_paths": [str(path) for path in self.data.validation_input_paths],
                 "stride": self.data.stride,
                 "val_fraction": self.data.val_fraction,
             },
@@ -349,7 +351,11 @@ def parse_config(data: Mapping[str, object], *, base_dir: Path) -> AtlasConfig:
         "model",
     )
     _check_keys(tokenizer_table, {"vocab_size", "min_frequency"}, "tokenizer")
-    _check_keys(data_table, {"input_paths", "stride", "val_fraction"}, "data")
+    _check_keys(
+        data_table,
+        {"input_paths", "validation_input_paths", "stride", "val_fraction"},
+        "data",
+    )
 
     device = runtime_table.get("device", runtime_defaults.device)
     if not isinstance(device, str) or device != "cpu":
@@ -405,6 +411,12 @@ def parse_config(data: Mapping[str, object], *, base_dir: Path) -> AtlasConfig:
     )
     data_config = DataConfig(
         input_paths=_path_list(data_table, "input_paths", data_defaults.input_paths, base_dir),
+        validation_input_paths=_path_list(
+            data_table,
+            "validation_input_paths",
+            data_defaults.validation_input_paths,
+            base_dir,
+        ),
         stride=_integer(data_table, "stride", data_defaults.stride, minimum=1, maximum=4096),
         val_fraction=_number(
             data_table, "val_fraction", data_defaults.val_fraction, minimum=0.0, maximum=0.999

@@ -1,0 +1,43 @@
+Задача: Say hello and describe your limits.
+Ответ: {"action":"respond","text":"Hello! I am Atlas AI, a small local experimental assistant. I can practice basic questions, but I am not a fully trained general-purpose model."}
+
+Задача: Explain what a variable is in programming.
+Ответ: {"action":"respond","text":"A variable is a name bound to a value. In Python, count = 3 binds the name count to the integer 3."}
+
+Задача: What is the difference between JavaScript and TypeScript?
+Ответ: {"action":"respond","text":"JavaScript runs directly in browsers and Node.js. TypeScript adds static types and is usually compiled or transpiled to JavaScript before execution."}
+
+Задача: Translate to Russian: The request failed because the token expired.
+Ответ: {"action":"respond","text":"Запрос не удался, потому что срок действия токена истёк."}
+
+Задача: Translate to English: Проверь код ответа перед разбором JSON.
+Ответ: {"action":"respond","text":"Check the response status code before parsing JSON."}
+
+Задача: How should an assistant answer when it does not know?
+Ответ: {"action":"respond","text":"It should say that it does not know, explain what information is missing, and suggest a safe way to verify the answer."}
+
+Задача: Give a clear terminal example for listing files.
+Ответ: {"action":"respond","text":"Use ls to list names, or ls -la to include hidden files and details. This is an explanation; the assistant has not executed the command."}
+
+Задача: Explain an HTTP 404 response.
+Ответ: {"action":"respond","text":"HTTP 404 means the server could not find the requested resource. Check the URL, route, and deployment. It does not prove that the whole server is down."}
+
+Задача: The user asks for a React component.
+Ответ: {"action":"respond","text":"A React component is a function that returns UI. Example: function Hello() { return <h1>Hello</h1>; }. JSX needs a build tool or a compatible runtime."}
+
+Задача: The request is ambiguous.
+Ответ: {"action":"think","text":"The target language and runtime are missing. Ask one focused clarification question."}
+Наблюдение: Note recorded. No tools were called.
+Ответ: {"action":"respond","text":"Which language and runtime should I target: Python, Node.js, or a browser?"}
+
+Задача: Summarize why tests matter.
+Ответ: {"action":"respond","text":"Tests check expected behavior, document examples, and catch regressions when code changes."}
+
+Задача: Explain the difference between a command and a request.
+Ответ: {"action":"respond","text":"A request describes what the user wants. A command is an executable instruction for a shell or program. An assistant must not claim execution without a real tool result."}
+
+Задача: What is a safe response format?
+Ответ: {"action":"respond","text":"Return one JSON object with action and text. Use think for a short note and respond for the final user-facing answer."}
+
+Задача: Explain stdout and stderr.
+Ответ: {"action":"respond","text":"Stdout is the normal output stream, while stderr is for diagnostics and errors. Keeping them separate makes scripts easier to pipe and debug."}

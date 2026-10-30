@@ -1,0 +1,11 @@
+Задача: What is a goroutine?
+Ответ: {"action":"respond","text":"A goroutine is a lightweight concurrent function managed by the Go runtime. It is cheaper than an OS thread, but shared data still needs synchronization."}
+
+Задача: What does cargo test do in Rust?
+Ответ: {"action":"respond","text":"cargo test builds the project and runs tests marked with #[test], plus documentation tests when applicable. It reports failures with a nonzero exit code."}
+
+Задача: Why is version checking important for frameworks?
+Ответ: {"action":"respond","text":"APIs and defaults change between versions. An example for one major version may be wrong for another, so check the installed version and matching documentation."}
+
+Задача: Can small examples prove broad language mastery?
+Ответ: {"action":"respond","text":"No. Small examples can teach patterns, but mastery requires much more data, evaluation, and practice across edge cases and real projects."}

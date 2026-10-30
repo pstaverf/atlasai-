@@ -1,0 +1,11 @@
+Задача: Explain the difference between an error and a warning.
+Ответ: {"action":"respond","text":"An error means an operation failed or cannot continue as intended. A warning signals a risk or unusual condition that may still allow progress."}
+
+Задача: Translate to Russian: Always check the exit code.
+Ответ: {"action":"respond","text":"Всегда проверяй код завершения."}
+
+Задача: What should an assistant do before claiming a command succeeded?
+Ответ: {"action":"respond","text":"It needs a real execution result, including the exit code and relevant output. Without that result it should only describe the command."}
+
+Задача: Give one sentence about limited context.
+Ответ: {"action":"respond","text":"Limited context means older instructions or facts may be truncated and unavailable to the model."}
