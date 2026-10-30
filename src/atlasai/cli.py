@@ -11,13 +11,18 @@ from collections.abc import Sequence
 from dataclasses import replace
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from atlasai import __version__
+from atlasai.agents.errors import AgentError
 from atlasai.config import DEFAULT_CONFIG_PATH, AtlasConfig, ConfigError, load_config
 from atlasai.core.model.base import LLMError
 from atlasai.core.tokenizer.bpe import BPETokenizer, TokenizerError, train_bpe
 from atlasai.training.dataset import DatasetError, load_dataset, read_documents
 from atlasai.training.errors import TrainingError
+
+if TYPE_CHECKING:
+    from atlasai.core.model.local import AtlasLocalModel
 
 _REQUIRED_PYTHON = (3, 12)
 
@@ -104,7 +109,7 @@ def doctor_report(config: AtlasConfig, config_path: Path) -> dict[str, object]:
     statuses = {check["status"] for check in checks}
     status = "error" if "error" in statuses else "warning" if "warning" in statuses else "ok"
     return {
-        "stage": 4,
+        "stage": 5,
         "status": status,
         "config_path": str(config_path),
         "backend": config.model.backend,
@@ -118,6 +123,7 @@ def doctor_report(config: AtlasConfig, config_path: Path) -> dict[str, object]:
         "artifacts": artifacts,
         "model_loaded": False,
         "model_status": "local_backend_implemented",
+        "agent_status": "basic_agent_implemented",
         "checks": checks,
     }
 
@@ -207,6 +213,15 @@ def _parser() -> argparse.ArgumentParser:
     for command in (generate, info):
         command.add_argument("--tokenizer", type=Path, default=None)
         command.add_argument("--checkpoint", type=Path, default=None)
+
+    agent = commands.add_parser("agent", help="Run the basic think-act-observe agent")
+    agent_commands = agent.add_subparsers(dest="agent_command", required=True)
+    run_agent = agent_commands.add_parser("run", parents=[common], help="Run one bounded task")
+    run_agent.add_argument("--task", required=True)
+    run_agent.add_argument("--max-steps", type=int, default=None)
+    run_agent.add_argument("--tokenizer", type=Path, default=None)
+    run_agent.add_argument("--checkpoint", type=Path, default=None)
+    run_agent.add_argument("--seed", type=int, default=None)
     return parser
 
 
@@ -396,7 +411,7 @@ def _run_model(args: argparse.Namespace, config: AtlasConfig) -> dict[str, objec
     raise ConfigError(f"Unknown model command: {args.model_command}")
 
 
-def _run_llm(args: argparse.Namespace, config: AtlasConfig) -> dict[str, object]:
+def _load_backend(args: argparse.Namespace, config: AtlasConfig) -> AtlasLocalModel:
     try:
         from atlasai.core.model.local import AtlasLocalModel
     except (ImportError, OSError) as exc:
@@ -410,7 +425,7 @@ def _run_llm(args: argparse.Namespace, config: AtlasConfig) -> dict[str, object]
         else config.model.checkpoint_path
     )
     seed = args.seed if getattr(args, "seed", None) is not None else config.runtime.seed
-    backend = AtlasLocalModel(
+    return AtlasLocalModel(
         checkpoint_path,
         _tokenizer_path(args, config),
         max_new_tokens=config.model.max_new_tokens,
@@ -418,6 +433,10 @@ def _run_llm(args: argparse.Namespace, config: AtlasConfig) -> dict[str, object]
         num_threads=config.runtime.num_threads,
         seed=seed,
     )
+
+
+def _run_llm(args: argparse.Namespace, config: AtlasConfig) -> dict[str, object]:
+    backend = _load_backend(args, config)
     if args.llm_command == "info":
         payload: dict[str, object] = dict(backend.info())
         payload["command"] = "llm.info"
@@ -431,6 +450,22 @@ def _run_llm(args: argparse.Namespace, config: AtlasConfig) -> dict[str, object]
         payload["parameter_count"] = backend.parameter_count
         return payload
     raise ConfigError(f"Unknown llm command: {args.llm_command}")
+
+
+def _run_agent(args: argparse.Namespace, config: AtlasConfig) -> dict[str, object]:
+    from atlasai.agents.basic import AgentConfig, BasicAgent
+
+    if args.agent_command != "run":
+        raise ConfigError(f"Unknown agent command: {args.agent_command}")
+    backend = _load_backend(args, config)
+    agent_config = AgentConfig(
+        max_steps=args.max_steps if args.max_steps is not None else AgentConfig().max_steps
+    )
+    result = BasicAgent(backend, agent_config).run(args.task)
+    payload: dict[str, object] = dict(result.to_dict())
+    payload["command"] = "agent.run"
+    payload["parameter_count"] = backend.parameter_count
+    return payload
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -451,6 +486,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             report = _run_model(args, config)
         elif args.command == "llm":
             report = _run_llm(args, config)
+        elif args.command == "agent":
+            report = _run_agent(args, config)
         else:
             raise ConfigError(f"Unknown command: {args.command}")
     except (
@@ -459,6 +496,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         DatasetError,
         TrainingError,
         LLMError,
+        AgentError,
         OSError,
         RuntimeError,
     ) as exc:
@@ -466,7 +504,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
-    return 1 if args.command == "doctor" and report.get("status") == "error" else 0
+    if args.command == "doctor" and report.get("status") == "error":
+        return 1
+    if args.command == "agent" and report.get("status") != "completed":
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

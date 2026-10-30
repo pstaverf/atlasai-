@@ -1,6 +1,6 @@
 """A small causal Transformer decoder implemented directly with PyTorch ops.
 
-This module implements the architecture, not the stage-4 LLM adapter. Attention,
+This module implements the architecture used by the local LLM adapter. Attention,
 residual blocks, normalization, and the language-model head are explicit so the
 training path can be inspected and tested without ``nn.Transformer``.
 """

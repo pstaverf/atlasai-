@@ -35,7 +35,7 @@ class RuntimeConfig:
 
 @dataclass(frozen=True, slots=True)
 class ModelConfig:
-    """Local artifact paths and decoding limits; the LLM adapter arrives at stage 4."""
+    """Local artifact paths and decoding limits for the own LLM backend."""
 
     backend: Literal["atlas-local"] = "atlas-local"
     tokenizer_path: Path = Path("checkpoints/tokenizer.json")
