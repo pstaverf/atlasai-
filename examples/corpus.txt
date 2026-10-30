@@ -1,0 +1,39 @@
+Atlas AI is a local-first agent system with its own language model.
+The system receives a task, plans the work, and creates subagents for smaller jobs.
+Each subagent has a role, a set of tools, and explicit limits on steps and tokens.
+The orchestrator checks intermediate results and combines them into a final answer.
+
+Atlas AI — локальная агентная система с собственной языковой моделью.
+Система получает задачу, планирует работу и создаёт подагентов для небольших подзадач.
+У каждого подагента есть роль, набор инструментов и явные лимиты шагов и токенов.
+Оркестратор проверяет промежуточные результаты и собирает итоговый ответ.
+
+A tokenizer converts text into integer identifiers before the model sees it.
+Byte-level BPE starts from UTF-8 bytes and learns frequent merge rules.
+This makes Russian, English, punctuation, and emoji representable without an unknown token.
+The dataset preparation step creates input and target windows shifted by one token.
+
+Токенизатор превращает текст в целочисленные идентификаторы до передачи в модель.
+Byte-level BPE начинает с UTF-8 байтов и изучает частые правила слияния.
+Это позволяет представлять русский текст, английский текст, пунктуацию и emoji без неизвестного токена.
+Подготовка датасета создаёт окна входа и цели, сдвинутые на один токен.
+
+Search must be real: the agent should query a provider, open URLs, and read page text.
+Snippets alone are not enough when the answer depends on details inside a document.
+Fetching should have timeouts, size limits, clear errors, and source attribution.
+Dangerous actions require explicit confirmation before execution.
+
+Поиск должен быть настоящим: агент делает запрос, открывает URL и читает текст страницы.
+Одних сниппетов недостаточно, если ответ зависит от деталей внутри документа.
+Загрузка страниц должна иметь таймауты, лимиты размера, понятные ошибки и указание источника.
+Опасные действия требуют явного подтверждения перед выполнением.
+
+Small models are useful for testing the full pipeline on limited hardware.
+A tiny transformer can verify shapes, gradients, checkpoints, and decoding behavior.
+It should not be described as a production reasoning engine.
+Measure memory and latency before adding native code or larger vocabularies.
+
+Маленькие модели полезны для проверки полного конвейера на ограниченном железе.
+Небольшой transformer может проверить формы тензоров, градиенты, чекпоинты и декодирование.
+Его не следует называть production-механизмом рассуждений.
+Измеряйте память и задержку до добавления нативного кода или больших словарей.

@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools==84.2.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atlasai"
+version = "0.5.0"
+description = "Local-first agentic system with its own transformer language model"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[project.optional-dependencies]
+# Needed from the model/inference stages onward, not for the stage-1 scaffold.
+# On Linux, read the CPU-wheel instructions in README before installing this extra.
+model = ["torch==2.15.0"]
+dev = [
+    "pytest==9.2.0",
+    "ruff==0.17.3",
+    "mypy==2.4.1",
+]
+
+[project.scripts]
+atlasai = "atlasai.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+atlasai = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-config --strict-markers"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src", "tests"]
+strict = true
+warn_unreachable = true
+# Keep the small project usable with minimal Python builds that lack sqlite3.
+sqlite_cache = false

@@ -1,0 +1,41 @@
+Задача: Explain let, const, and var.
+Ответ: {"action":"respond","text":"let and const are block-scoped; var is function-scoped and hoisted differently. const prevents reassignment of the binding, but an object assigned to const can still be mutated."}
+
+Задача: Show an async fetch with error handling.
+Ответ: {"action":"respond","text":"async function load(url) {\n  const response = await fetch(url);\n  if (!response.ok) throw new Error(`HTTP ${response.status}`);\n  return response.json();\n}\n\nNetwork errors still need a catch at the call site."}
+
+Задача: What is the difference between == and === in JavaScript?
+Ответ: {"action":"respond","text":"=== compares without type coercion, while == may convert types. Prefer === unless you intentionally need coercion."}
+
+Задача: Explain map and filter.
+Ответ: {"action":"respond","text":"const doubled = [1, 2, 3].map(x => x * 2); const even = [1, 2, 3].filter(x => x % 2 === 0); map transforms each item, filter keeps items matching a predicate."}
+
+Задача: What does npm install do?
+Ответ: {"action":"respond","text":"npm install reads package.json and the lockfile, downloads dependencies into node_modules, and may update the lockfile. Use npm ci for reproducible clean installs from an existing lockfile."}
+
+Задача: Give a minimal React component.
+Ответ: {"action":"respond","text":"function Hello({ name }) {\n  return <h1>Hello, {name}</h1>;\n}\n\nReact components should be pure during render. Side effects belong in event handlers or effects."}
+
+Задача: What is useState in React?
+Ответ: {"action":"respond","text":"const [count, setCount] = useState(0); setCount updates state and schedules a render. Do not mutate state directly, and follow the rules of hooks."}
+
+Задача: Explain Vue ref basics.
+Ответ: {"action":"respond","text":"import { ref } from 'vue'; const count = ref(0); In script use count.value; in a template Vue unwraps the ref. Reactivity tracks reads and writes."}
+
+Задача: What is Express middleware?
+Ответ: {"action":"respond","text":"app.use((req, res, next) => { console.log(req.method); next(); }); Middleware runs in order. Call next() to continue, or send a response and stop."}
+
+Задача: What is Next.js used for?
+Ответ: {"action":"respond","text":"Next.js is a React framework with routing, server rendering, static generation, and server-side data loading. Check the installed version because App Router and Pages Router differ."}
+
+Задача: Show a TypeScript interface and function.
+Ответ: {"action":"respond","text":"interface User { id: number; name: string }\nfunction label(user: User): string { return `${user.id}: ${user.name}`; }\n\nTypes are checked at compile time, not automatically at runtime."}
+
+Задача: Explain promises.
+Ответ: {"action":"respond","text":"A promise represents a future result. await pauses an async function until it settles. Use try/catch for rejected promises and Promise.all for independent concurrent tasks."}
+
+Задача: What is a closure?
+Ответ: {"action":"respond","text":"function counter() { let n = 0; return () => ++n; } The returned function keeps access to n even after counter returns."}
+
+Задача: Can you run npm commands for me?
+Ответ: {"action":"respond","text":"Not in this stage. I can explain the command and expected files, but real execution requires an approved terminal tool and a recorded result."}

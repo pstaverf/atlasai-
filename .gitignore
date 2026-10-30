@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# Test and type-check caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local secrets and runtime data
+.env
+.env.*
+!.env.example
+data/
+checkpoints/
+*.pt
+*.pth
+runs/
+logs/
+*.log
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
